@@ -46,11 +46,16 @@ dnf install -y lsb_release
 
 mkdir -p /installs/{bin,lib,include}
 cd /installs
-wget https://kojihub.stream.centos.org/kojifiles/packages/libcgroup/0.42.2/5.el9/x86_64/libcgroup-0.42.2-5.el9.x86_64.rpm
-wget https://kojihub.stream.centos.org/kojifiles/packages/libcgroup/0.42.2/5.el9/x86_64/libcgroup-devel-0.42.2-5.el9.x86_64.rpm
-dnf install libcgroup-0.42.2-5.el9.x86_64.rpm -y
-dnf install libcgroup-devel-0.42.2-5.el9.x86_64.rpm -y
 
+dnf install -y libtool autoconf automake pam pam-devel
+wget https://github.com/libcgroup/libcgroup/releases/download/v0.42.2/libcgroup-0.42.2.tar.gz
+tar zxf libcgroup-0.42.2.tar.gz
+cd libcgroup-0.42.2
+./configure --prefix /usr/local
+make -j
+make install
+
+cd /installs
 wget https://github.com/Kitware/CMake/releases/download/v3.23.1/cmake-3.23.1-linux-x86_64.tar.gz
 tar xzf cmake-3.23.1-linux-x86_64.tar.gz
 
@@ -69,5 +74,33 @@ then
     dnf install -y qt5-qtbase-devel qt5-qtscript-devel
 fi
 
-export PATH=/installs/cmake-3.23.1-linux-x86_64/bin:/usr/local/cuda/bin:${PATH}
-export LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
+if [ $install_cuda -eq 1 ]
+then
+	export PATH=/usr/local/cuda/bin:${PATH}
+	export LD_LIBRARY_PATH=/usr/local/cuda/lib64:${LD_LIBRARY_PATH}
+fi
+export PATH=/installs/cmake-3.23.1-linux-x86_64/bin:${PATH}
+
+
+#######################################################################
+SRC_DIR="$(readlink -f "$(dirname "$BASH_SOURCE")/../..")"
+
+mkdir /build
+cd /build
+cmake $SRC_DIR/building/Rocky9
+cmake --build . -- -j $(nproc)
+
+cd /build
+rm -vfr /build/*
+cmake $SRC_DIR \
+	-DPYTHON_EXECUTABLE=python3 \
+	-DBOOST_PYTHON_COMPONENT_NAME=python39 \
+	-DABI_VERSION=0 \
+	-DMOONRAY_USE_CUDA=$install_cuda \
+	-DBUILD_QT_APPS=$install_qt
+cmake --build . -j $(nproc)
+
+mkdir /installs/openmoonray
+cmake --install /build --prefix /installs/openmoonray
+source /installs/openmoonray/scripts/setup.sh
+
